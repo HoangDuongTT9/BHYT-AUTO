@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BHYT Robot Manager</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+        }
+
+        body {
+            font-family: -apple-system, system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 15px;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            color: var(--primary);
+            margin: 0 0 15px 0;
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        button.secondary {
+            background: #64748b;
+        }
+
+        .status {
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 8px;
+            background: #e2e8f0;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .done {
+            color: #10b981;
+            font-weight: bold;
+        }
+
+        .pending {
+            color: #f59e0b;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>BHYT Robot 100% Auto</h1>
+            <p>1. Chọn file dữ liệu (.txt hoặc .csv):</p>
+            <input type="file" id="fileInput" accept=".txt,.csv" style="margin-bottom:15px; width: 100%;">
+
+            <div
+                style="margin-bottom:15px; background: #fffbeb; padding: 10px; border-radius: 8px; border: 1px solid #fef3c7;">
+                <label style="display:flex; align-items:center; cursor:pointer;">
+                    <input type="checkbox" id="autoRun" style="width:22px; height:22px; margin-right:10px;">
+                    <strong style="color: #92400e;">Chế độ Tự động (Auto-Loop)</strong>
+                </label>
+            </div>
+
+            <button onclick="importData()">Nạp dữ liệu & Bắt đầu</button>
+            <button class="secondary" onclick="exportResults()">Xuất kết quả (TXT)</button>
+        </div>
+
+        <div class="card">
+            <div id="statusBox" class="status">Chưa có dữ liệu</div>
+            <button id="btnNext" style="display:none;" onclick="startNext()">Bắt đầu dòng tiếp theo</button>
+            <div id="currentTask" style="margin-top:15px; display:none;">
+                <p><strong>Đang tra cứu:</strong> <span id="taskName"></span></p>
+                <p>Mã thẻ: <code id="taskID"></code></p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Danh sách</h3>
+            <div style="overflow-x:auto;">
+                <table id="taskTable">
+                    <thead>
+                        <tr>
+                            <th>STT</th>
+                            <th>Mã thẻ</th>
+                            <th>Kết quả</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let tasks = [];
+        let currentIndex = -1;
+
+        if (localStorage.getItem('bhyt_tasks')) {
+            tasks = JSON.parse(localStorage.getItem('bhyt_tasks'));
+            renderTable(); updateStatus();
+        }
+
+        function importData() {
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput.files.length === 0) return alert("Chọn file!");
+            const reader = new FileReader();
+            reader.onload = (e) => processRawData(e.target.result.trim());
+            reader.readAsText(fileInput.files[0]);
+        }
+
+        function processRawData(raw) {
+            const lines = raw.split(/\r?\n/);
+            tasks = lines.map(line => {
+                const parts = line.includes('\t') ? line.split('\t') : line.split(',');
+                return { name: parts[0]?.trim(), dob: parts[1]?.trim(), id: parts[2]?.trim(), result: '' };
+            }).filter(t => t.id && t.id.length > 5);
+            localStorage.setItem('bhyt_tasks', JSON.stringify(tasks));
+            renderTable(); updateStatus();
+            alert(`Đã nạp ${tasks.length} dòng!`);
+        }
+
+        function updateStatus() {
+            const done = tasks.filter(t => t.result).length;
+            document.getElementById('statusBox').innerText = `Tiến độ: ${done}/${tasks.length}`;
+            document.getElementById('btnNext').style.display = (done < tasks.length) ? 'block' : 'none';
+        }
+
+        function renderTable() {
+            document.querySelector('#taskTable tbody').innerHTML = tasks.map((t, i) => `
+                <tr><td>${i + 1}</td><td>${t.id}</td><td class="${t.result ? 'done' : 'pending'}">${t.result || 'Chờ...'}</td></tr>
+            `).join('');
+        }
+
+        function startNext() {
+            currentIndex = tasks.findIndex(t => !t.result);
+            if (currentIndex === -1) return;
+            const task = tasks[currentIndex];
+            document.getElementById('currentTask').style.display = 'block';
+            document.getElementById('taskName').innerText = task.name;
+            document.getElementById('taskID').innerText = task.id;
+
+            // Gửi tín hiệu cho Userscript Tampermonkey
+            window.postMessage({ type: 'START_ROBOT_TASK', task: { index: currentIndex, ...task } }, "*");
+            window.open('https://baohiemxahoi.gov.vn/tracuu/Pages/tra-cuu-thoi-han-su-dung-the-bhyt.aspx', '_blank');
+        }
+
+        window.addEventListener('message', (e) => {
+            if (e.data.type === 'ROBOT_RESULT') {
+                const data = e.data.data;
+                if (data && tasks[data.index]) {
+                    tasks[data.index].result = data.result;
+                    localStorage.setItem('bhyt_tasks', JSON.stringify(tasks));
+                    renderTable(); updateStatus();
+                    if (document.getElementById('autoRun').checked) setTimeout(startNext, 2000);
+                }
+            }
+        });
+
+        function exportResults() {
+            let content = "STT\tHọ tên\tNgày sinh\tMã thẻ\tKết quả\n";
+            tasks.forEach((t, i) => content += `${i + 1}\t${t.name}\t${t.dob}\t${t.id}\t${t.result}\n`);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+            a.download = `KetQua_BHYT.txt`; a.click();
+        }
+    </script>
+</body>
+
+</html>
