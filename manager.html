@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BHYT Robot Manager</title>
+    <title>BHYT Robot Manager 3.2</title>
     <style>
         :root {
             --primary: #2563eb;
@@ -62,7 +62,7 @@
             border-radius: 8px;
             background: #e2e8f0;
             text-align: center;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
         }
 
         table {
@@ -74,7 +74,7 @@
         th,
         td {
             text-align: left;
-            padding: 8px;
+            padding: 10px;
             border-bottom: 1px solid #e2e8f0;
         }
 
@@ -86,20 +86,28 @@
         .pending {
             color: #f59e0b;
         }
+
+        input[type="file"] {
+            margin-bottom: 15px;
+            width: 100%;
+            padding: 10px;
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
         <div class="card">
-            <h1>BHYT Robot 100% Auto</h1>
+            <h1>BHYT Robot Auto 3.2</h1>
             <p>1. Chọn file dữ liệu (.txt hoặc .csv):</p>
-            <input type="file" id="fileInput" accept=".txt,.csv" style="margin-bottom:15px; width: 100%;">
+            <input type="file" id="fileInput" accept=".txt,.csv">
 
             <div
-                style="margin-bottom:15px; background: #fffbeb; padding: 10px; border-radius: 8px; border: 1px solid #fef3c7;">
+                style="margin-bottom:15px; background: #fffbeb; padding: 12px; border-radius: 8px; border: 1px solid #fef3c7;">
                 <label style="display:flex; align-items:center; cursor:pointer;">
-                    <input type="checkbox" id="autoRun" style="width:22px; height:22px; margin-right:10px;">
+                    <input type="checkbox" id="autoRun" style="width:22px; height:22px; margin-right:10px;" checked>
                     <strong style="color: #92400e;">Chế độ Tự động (Auto-Loop)</strong>
                 </label>
             </div>
@@ -111,14 +119,15 @@
         <div class="card">
             <div id="statusBox" class="status">Chưa có dữ liệu</div>
             <button id="btnNext" style="display:none;" onclick="startNext()">Bắt đầu dòng tiếp theo</button>
-            <div id="currentTask" style="margin-top:15px; display:none;">
-                <p><strong>Đang tra cứu:</strong> <span id="taskName"></span></p>
-                <p>Mã thẻ: <code id="taskID"></code></p>
+            <div id="currentTask"
+                style="margin-top:15px; display:none; background: #f1f5f9; padding:10px; border-radius:8px;">
+                <p style="margin:0;"><strong>Đang xử lý:</strong> <span id="taskName"></span></p>
+                <p style="margin:5px 0 0 0;">Mã thẻ: <code id="taskID"></code></p>
             </div>
         </div>
 
         <div class="card">
-            <h3>Danh sách</h3>
+            <h3>Danh sách tra cứu</h3>
             <div style="overflow-x:auto;">
                 <table id="taskTable">
                     <thead>
@@ -138,6 +147,7 @@
         let tasks = [];
         let currentIndex = -1;
 
+        // Tải dữ liệu cũ nếu có
         if (localStorage.getItem('bhyt_tasks')) {
             tasks = JSON.parse(localStorage.getItem('bhyt_tasks'));
             renderTable(); updateStatus();
@@ -145,7 +155,7 @@
 
         function importData() {
             const fileInput = document.getElementById('fileInput');
-            if (fileInput.files.length === 0) return alert("Chọn file!");
+            if (fileInput.files.length === 0) return alert("Vui lòng chọn file!");
             const reader = new FileReader();
             reader.onload = (e) => processRawData(e.target.result.trim());
             reader.readAsText(fileInput.files[0]);
@@ -159,7 +169,7 @@
             }).filter(t => t.id && t.id.length > 5);
             localStorage.setItem('bhyt_tasks', JSON.stringify(tasks));
             renderTable(); updateStatus();
-            alert(`Đã nạp ${tasks.length} dòng!`);
+            alert(`Đã nạp thành công ${tasks.length} dòng!`);
         }
 
         function updateStatus() {
@@ -176,34 +186,46 @@
 
         function startNext() {
             currentIndex = tasks.findIndex(t => !t.result);
-            if (currentIndex === -1) return;
+            if (currentIndex === -1) return alert("Đã xử lý xong tất cả!");
             const task = tasks[currentIndex];
             document.getElementById('currentTask').style.display = 'block';
             document.getElementById('taskName').innerText = task.name;
             document.getElementById('taskID').innerText = task.id;
 
-            // Gửi tín hiệu cho Userscript Tampermonkey
-            window.postMessage({ type: 'START_ROBOT_TASK', task: { index: currentIndex, ...task } }, "*");
+            // CẮM CỜ LỆNH (Userscript sẽ nhìn thấy cái này qua LocalStorage)
+            localStorage.setItem('ROBOT_CMD', JSON.stringify({ index: currentIndex, ...task }));
+
+            // Mở tab tra cứu
             window.open('https://baohiemxahoi.gov.vn/tracuu/Pages/tra-cuu-thoi-han-su-dung-the-bhyt.aspx', '_blank');
         }
 
-        window.addEventListener('message', (e) => {
-            if (e.data.type === 'ROBOT_RESULT') {
-                const data = e.data.data;
+        // VÒNG LẶP KIỂM TRA KẾT QUẢ "VẪY CỜ" NGƯỢC LẠI
+        setInterval(() => {
+            const resultRaw = localStorage.getItem('WEB_RESULT');
+            if (resultRaw) {
+                const data = JSON.parse(resultRaw);
                 if (data && tasks[data.index]) {
                     tasks[data.index].result = data.result;
                     localStorage.setItem('bhyt_tasks', JSON.stringify(tasks));
                     renderTable(); updateStatus();
-                    if (document.getElementById('autoRun').checked) setTimeout(startNext, 2000);
+
+                    // Xóa kết quả tạm
+                    localStorage.removeItem('WEB_RESULT');
+
+                    // Nếu bật Auto-Loop, tự nhảy dòng sau 2 giây
+                    if (document.getElementById('autoRun').checked) {
+                        setTimeout(startNext, 2000);
+                    }
                 }
             }
-        });
+        }, 1000);
 
         function exportResults() {
             let content = "STT\tHọ tên\tNgày sinh\tMã thẻ\tKết quả\n";
             tasks.forEach((t, i) => content += `${i + 1}\t${t.name}\t${t.dob}\t${t.id}\t${t.result}\n`);
+            const blob = new Blob([content], { type: 'text/plain' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+            a.href = URL.createObjectURL(blob);
             a.download = `KetQua_BHYT.txt`; a.click();
         }
     </script>
